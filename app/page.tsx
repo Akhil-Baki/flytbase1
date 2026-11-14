@@ -65,8 +65,9 @@ export default function Home() {
   const deals = arr(active?.opportunities ?? active?.deals ?? active?.pipeline);
   const people = arr(active?.stakeholders ?? active?.people ?? active?.contacts);
   const facts = arr(active?.facts);
-  const signalsRoot = payload?.signals?.items ?? payload?.signals?.signals ?? payload?.signals ?? [];
-  const signals = arr(signalsRoot).filter((s:any) => !s.account || s.account === active?.id);
+  const signals = arr(payload?.signals).filter(
+    (s: any) => !s.account || s.account === active?.id
+  );
   const accountTitle = active?.name ?? active?.account ?? selected;
   const isA = active?.id === "A" || selected === accountNames[0];
   const actions = buildActions(active, signals);
@@ -88,10 +89,30 @@ export default function Home() {
   async function fetchSignals() {
     setNoteStatus("Fetching live signals…");
     try {
-      const r=await fetch("/api/refresh",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"signals"})});
-      const d=await r.json(); if(!r.ok) throw new Error(d.error ?? "Signal fetch failed");
-      setPayload(p=>({...p,signals:d.result})); setNoteStatus("Live signals updated.");
-    } catch(e:any) { setNoteStatus(e.message ?? "Signal fetch failed."); }
+      const r = await fetch("/api/refresh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "signals" })
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Signal fetch failed");
+
+      // The MCP tool returns an object shaped like { signals: [...] }.
+      // Keep only the actual signal array in page state for straightforward rendering.
+      const result = d.result ?? d;
+      const actualSignals = Array.isArray(result)
+        ? result
+        : result?.signals ?? result?.result?.signals ?? result?.items ?? [];
+
+      if (!Array.isArray(actualSignals)) {
+        throw new Error("The signal response did not contain a signals array.");
+      }
+
+      setPayload(p => ({ ...(p ?? {}), signals: actualSignals }));
+      setNoteStatus(`${actualSignals.length} live signal(s) loaded.`);
+    } catch (e: any) {
+      setNoteStatus(e.message ?? "Signal fetch failed.");
+    }
   }
   async function saveNote() {
     if (!note.trim()) return;
