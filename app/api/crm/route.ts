@@ -3,12 +3,37 @@ import { callMcp, safeError } from "@/lib/mcp";
 
 export const dynamic = "force-dynamic";
 
-// Respect the Questathon limit: one MCP call per token per minute.
-// Initial load fetches only the account snapshot. Fetch signals/notes separately later.
-export async function GET() {
+export async function POST(request: Request) {
   try {
-    const accounts = await callMcp("get_my_accounts");
-    return NextResponse.json({ accounts, fetchedAt: new Date().toISOString() });
+    const body = await request.json().catch(() => ({}));
+
+    if (body.action === "signals") {
+      // Preserve the Questathon response as returned. The frontend unwraps
+      // the { signals: [...] } payload and renders the individual records.
+      const result = await callMcp("get_signals");
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (body.action === "notes") {
+      const result = await callMcp("list_notes");
+      return NextResponse.json({ ok: true, result });
+    }
+
+    if (typeof body.text !== "string" || !body.text.trim() || !body.account) {
+      return NextResponse.json(
+        { error: "Both account and text are required." },
+        { status: 400 }
+      );
+    }
+
+    const result = await callMcp("write_note", {
+      account: body.account,
+      kind: body.kind ?? "next_step",
+      title: body.title ?? "CRM update",
+      text: body.text.trim()
+    });
+
+    return NextResponse.json({ ok: true, result });
   } catch (error) {
     return NextResponse.json({ error: safeError(error) }, { status: 502 });
   }
